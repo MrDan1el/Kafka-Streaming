@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   zookeeper:
       image: confluentinc/cp-zookeeper:7.4.0
@@ -103,6 +101,66 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+
+  airflow-webserver:
+    image: apache/airflow:2.6.0-python3.9
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__WEBSERVER__SECRET_KEY: this_is_a_very_secured_key
+      _PIP_ADDITIONAL_REQUIREMENTS: "kafka-python==2.3.0"
+    depends_on:
+      - postgres
+    command: >
+      bash -c "airflow db upgrade &&
+               airflow users create -u admin -p admin -f admin -l admin -r Admin -e admin@example.com || true &&
+               airflow webserver"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+    healthcheck:
+      test: ['CMD-SHELL', "[ -f /opt/airflow/airflow-webserver.pid ]"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+    networks:
+      - confluent
+
+  airflow-scheduler:
+    image: apache/airflow:2.6.0-python3.9
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      _PIP_ADDITIONAL_REQUIREMENTS: "kafka-python==2.3.0"
+    depends_on:
+      postgres:
+        condition: service_started
+      airflow-webserver:
+        condition: service_healthy
+    command: >
+      bash -c "airflow scheduler"
+    volumes:
+      - ./dags:/opt/airflow/dags
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'airflow webserver' >/dev/null"]
+      interval: 10s
+      retries: 10
+    networks:
+      - confluent
+
+  postgres:
+    image: postgres:14.0
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks:
+      - confluent
 
 networks:
   confluent:

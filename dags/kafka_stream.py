@@ -1,5 +1,5 @@
 from airflow import DAG
-# from airflow.utils.dates import days_ago
+from airflow.utils.dates import days_ago
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 
@@ -40,45 +40,41 @@ def format_data(data):
     return formated_data
 
 
-def stream_data():
+def stream_from_api_to_kafka():
     data = get_data()
     formated_data = format_data(data)
     producer = KafkaProducer(
-        bootstrap_servers=['localhost:9092'],
+        bootstrap_servers=['broker:29092'],
         max_block_ms=5000
     )
     producer.send('users_created', json.dumps(formated_data).encode('utf-8'))
 
 
-stream_data()
+default_args = {
+    'owner': 'username',
+    'start_date': days_ago(1),
+    'retries': 5,
+    'retry_delay': timedelta(minutes=5) 
+}
 
-
-# default_args = {
-#     'owner': 'username',
-#     'start_date': days_ago(1),
-#     'retries': 5,
-#     'retry_delay': timedelta(minutes=5) 
-# }
-
-
-# with DAG(
-#     dag_id='user_automation',
-#     description='Stream data from API to Kafka',
-#     tags=['raw', 'kafka', 'api'],
-#     default_args=default_args,
-#     schedule_interval='0 9 * * *',
-#     catchup=False
-# ) as dag:
+with DAG(
+    dag_id='user_automation',
+    description='Stream data from API to Kafka',
+    tags=['raw', 'kafka', 'api'],
+    default_args=default_args,
+    schedule_interval='0 9 * * *',
+    catchup=False
+) as dag:
     
-#     start = EmptyOperator(
-#         task_id='start'
-#     )
+    start = EmptyOperator(
+        task_id='start'
+    )
 
-#     stream_from_api = PythonOperator(
-#         task_id='stream_from_api',
-#         python_callable=stream_from_api
-#     )
+    stream_from_api_to_kafka = PythonOperator(
+        task_id='stream_from_api_to_kafka',
+        python_callable=stream_from_api_to_kafka
+    )
 
-#     end = EmptyOperator(
-#         task_id='end'
-#     )
+    end = EmptyOperator(
+        task_id='end'
+    )
