@@ -41,13 +41,23 @@ def format_data(data):
 
 
 def stream_from_api_to_kafka():
-    data = get_data()
-    formated_data = format_data(data)
     producer = KafkaProducer(
         bootstrap_servers=['broker:29092'],
         max_block_ms=5000
     )
-    producer.send('users_created', json.dumps(formated_data).encode('utf-8'))
+    curr_time = time.time()
+
+    while True:
+        if time.time() > curr_time + 60:
+            break
+        try:
+            data = get_data()
+            formated_data = format_data(data)
+            formated_data = json.dumps(formated_data).encode('utf-8')
+            producer.send('users_created', formated_data)
+        except Exception as er:
+            logging.error(f">> Ошибка при попытке отправки сообщения в Kafka: {er}.")
+            continue
 
 
 default_args = {
@@ -58,7 +68,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id='user_automation',
+    dag_id='stream_to_kafka',
     description='Stream data from API to Kafka',
     tags=['raw', 'kafka', 'api'],
     default_args=default_args,
